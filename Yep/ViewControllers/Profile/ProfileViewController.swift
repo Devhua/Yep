@@ -349,6 +349,8 @@ class ProfileViewController: SegueViewController {
                 let settingsBarButtonItem = UIBarButtonItem(image: UIImage(named: "icon_settings"), style: .Plain, target: self, action: "showSettings:")
 
                 customNavigationItem.rightBarButtonItem = settingsBarButtonItem
+
+                NSNotificationCenter.defaultCenter().addObserver(self, selector: "createdFeed:", name: YepConfig.Notification.createdFeed, object: nil)
             }
         }
     }
@@ -376,7 +378,31 @@ class ProfileViewController: SegueViewController {
 
     @IBOutlet private weak var sayHiView: BottomButtonView!
 
-    private var customNavigationBar: UINavigationBar!
+    private lazy var customNavigationItem: UINavigationItem = UINavigationItem(title: "Details")
+    private lazy var customNavigationBar: UINavigationBar = {
+
+        let bar = UINavigationBar(frame: CGRectMake(0, 0, CGRectGetWidth(self.view.bounds), 64))
+
+        bar.tintColor = UIColor.whiteColor()
+        bar.tintAdjustmentMode = .Normal
+        bar.alpha = 0
+        bar.setItems([self.customNavigationItem], animated: false)
+
+        bar.backgroundColor = UIColor.clearColor()
+        bar.translucent = true
+        bar.shadowImage = UIImage()
+        bar.barStyle = UIBarStyle.BlackTranslucent
+        bar.setBackgroundImage(UIImage(), forBarMetrics: UIBarMetrics.Default)
+
+        let textAttributes = [
+            NSForegroundColorAttributeName: UIColor.whiteColor(),
+            NSFontAttributeName: UIFont.navigationBarTitleFont()
+        ]
+
+        bar.titleTextAttributes = textAttributes
+        
+        return bar
+    }()
 
     private let skillCellIdentifier = "SkillCell"
     private let headerCellIdentifier = "ProfileHeaderCell"
@@ -482,7 +508,7 @@ class ProfileViewController: SegueViewController {
     private var instagramWork: InstagramWork?
     private var githubWork: GithubWork?
     private var feeds: [DiscoveredFeed]?
-    private var feedAttachments: [DiscoveredAttachment]?
+    private var feedAttachments: [DiscoveredAttachment?]?
 
     private let skillTextAttributes = [NSFontAttributeName: UIFont.skillTextFont()]
 
@@ -492,8 +518,6 @@ class ProfileViewController: SegueViewController {
         let rect = self.introductionText.boundingRectWithSize(CGSize(width: labelWidth, height: CGFloat(FLT_MAX)), options: [.UsesLineFragmentOrigin, .UsesFontLeading], attributes:attributes, context:nil)
         return 10 + 24 + 4 + 18 + 10 + ceil(rect.height) + 4
     }
-
-    private var customNavigationItem: UINavigationItem = UINavigationItem(title: "Details")
 
     private struct Listener {
         let nickname: String
@@ -545,6 +569,8 @@ class ProfileViewController: SegueViewController {
 
         title = NSLocalizedString("Profile", comment: "")
 
+        view.addSubview(customNavigationBar)
+
         println("init ProfileViewController \(self)")
 
         NSNotificationCenter.defaultCenter().addObserver(self, selector: "cleanForLogout:", name: EditProfileViewController.Notification.Logout, object: nil)
@@ -571,8 +597,6 @@ class ProfileViewController: SegueViewController {
                     learningSkills = skillsFromUserSkillList(user.learningSkills)
 
                     updateProfileCollectionView()
-                    
-                    GoogleAnalyticsTrackEvent("Visit Profile", label: user.nickname, value: 0)
                 }
 
             default:
@@ -626,7 +650,6 @@ class ProfileViewController: SegueViewController {
 
         profileUserIsMe = profileUser?.isMe ?? false
 
-
         if let profileLayout = profileCollectionView.collectionViewLayout as? ProfileLayout {
 
             profileLayout.scrollUpAction = { [weak self] progress in
@@ -640,8 +663,7 @@ class ProfileViewController: SegueViewController {
                         let normalizedProgressForChange: CGFloat = (progress - beginChangePercentage) / (1 - beginChangePercentage)
                         
                         coverCell.avatarBlurImageView.alpha = progress < beginChangePercentage ? 0 : normalizedProgressForChange
-                        
-                        
+
                         let shadowAlpha = 1 - normalizedProgressForChange
                         
                         if shadowAlpha < 0.2 {
@@ -649,7 +671,6 @@ class ProfileViewController: SegueViewController {
                         } else {
                             strongSelf.topShadowImageView.alpha = progress < beginChangePercentage ? 1 : shadowAlpha
                         }
-
                         
                         coverCell.locationLabel.alpha = progress < 0.5 ? 1 : 1 - min(1, (progress - 0.5) * 2 * 2) // 特别对待，在后半程的前半段即完成 alpha -> 0
                     }
@@ -671,28 +692,6 @@ class ProfileViewController: SegueViewController {
         profileCollectionView.alwaysBounceVertical = true
         
         automaticallyAdjustsScrollViewInsets = false
-        
-        
-        customNavigationBar = UINavigationBar(frame: CGRectMake(0, 0, CGRectGetWidth(self.view.bounds), 64))
-        customNavigationBar.tintColor = UIColor.whiteColor()
-        customNavigationBar.tintAdjustmentMode = .Normal
-        customNavigationBar.alpha = 0
-        customNavigationBar.setItems([customNavigationItem], animated: false)
-        view.addSubview(customNavigationBar)
-        
-        customNavigationBar.backgroundColor = UIColor.clearColor()
-        customNavigationBar.translucent = true
-        customNavigationBar.shadowImage = UIImage()
-        customNavigationBar.barStyle = UIBarStyle.BlackTranslucent
-        customNavigationBar.setBackgroundImage(UIImage(), forBarMetrics: UIBarMetrics.Default)
-        
-        let textAttributes = [
-            NSForegroundColorAttributeName: UIColor.whiteColor(),
-            NSFontAttributeName: UIFont.navigationBarTitleFont()
-        ]
-        
-        customNavigationBar.titleTextAttributes = textAttributes
-
         
         //Make sure when pan edge screen collectionview not scroll
         if let gestures = navigationController?.view.gestureRecognizers {
@@ -723,6 +722,7 @@ class ProfileViewController: SegueViewController {
                     YepUserDefaults.nickname.bindListener(listener.nickname) { [weak self] nickname in
                         dispatch_async(dispatch_get_main_queue()) {
                             self?.customNavigationItem.title = nickname
+                            self?.updateProfileCollectionView()
                         }
                     }
 
@@ -737,6 +737,8 @@ class ProfileViewController: SegueViewController {
                             }
                         }
                     }
+
+                    NSNotificationCenter.defaultCenter().addObserver(self, selector: "updateUIForUsername:", name: EditProfileViewController.Notification.NewUsername, object: nil)
                 }
             }
 
@@ -808,16 +810,14 @@ class ProfileViewController: SegueViewController {
         }
 
         #if DEBUG
-//            view.addSubview(profileFPSLabel)
+            //view.addSubview(profileFPSLabel)
         #endif
     }
 
     override func viewWillAppear(animated: Bool) {
-
         super.viewWillAppear(animated)
 
-        self.navigationController?.setNavigationBarHidden(true, animated: true)
-
+        self.navigationController?.navigationBarHidden = true
         customNavigationBar.alpha = 1.0
 
         statusBarShouldLight = false
@@ -858,7 +858,6 @@ class ProfileViewController: SegueViewController {
             }
 
             let info = MonkeyKing.Info(
-                //title: String(format:NSLocalizedString("Yep! I'm %@.", comment: ""), nickname),
                 title: nickname,
                 description: NSLocalizedString("From Yep, with Skills.", comment: ""),
                 thumbnail: thumbnail,
@@ -872,7 +871,6 @@ class ProfileViewController: SegueViewController {
                 message: sessionMessage,
                 finish: { success in
                     println("share Profile to WeChat Session success: \(success)")
-                    GoogleAnalyticsTrackSocial("WeChat Session", action: "Profile", target: profileURL.absoluteString)
                 }
             )
 
@@ -883,12 +881,9 @@ class ProfileViewController: SegueViewController {
                 message: timelineMessage,
                 finish: { success in
                     println("share Profile to WeChat Timeline success: \(success)")
-                    GoogleAnalyticsTrackSocial("WeChat Timeline", action: "Profile", target: profileURL.absoluteString)
                 }
             )
             
-            GoogleAnalyticsTrackSocial("Share", action: "Profile", target: profileURL.absoluteString)
-
             let activityViewController = UIActivityViewController(activityItems: ["\(nickname), \(NSLocalizedString("From Yep, with Skills.", comment: "")) \(profileURL)"], applicationActivities: [weChatSessionActivity, weChatTimelineActivity])
 
             self.presentViewController(activityViewController, animated: true, completion: nil)
@@ -898,21 +893,15 @@ class ProfileViewController: SegueViewController {
     @objc private func tryShareMyProfile(sender: AnyObject?) {
 
         if let _ = profileUser?.username {
-            
-            if let profileUser = profileUser {
-                GoogleAnalyticsTrackEvent("Share Profile", label: "\(profileUser.nickname) \(profileUser.userID)", value: 0)
-            }
-            
             shareProfile()
 
         } else {
-
             YepAlert.textInput(title: NSLocalizedString("Create a username", comment: ""), message: NSLocalizedString("In order to share your profile, create a unique username first.", comment: ""), placeholder: NSLocalizedString("use letters, numbers, and underscore", comment: ""), oldText: nil, confirmTitle: NSLocalizedString("Create", comment: ""), cancelTitle: NSLocalizedString("Cancel", comment: ""), inViewController: self, withConfirmAction: { text in
 
                 let newUsername = text
 
                 updateMyselfWithInfo(["username": newUsername], failureHandler: { [weak self] reason, errorMessage in
-                    defaultFailureHandler(reason, errorMessage: errorMessage)
+                    defaultFailureHandler(reason: reason, errorMessage: errorMessage)
 
                     YepAlert.alertSorry(message: errorMessage ?? NSLocalizedString("Create username failed!", comment: ""), inViewController: self)
 
@@ -984,6 +973,33 @@ class ProfileViewController: SegueViewController {
         profileUser = nil
     }
 
+    @objc private func updateUIForUsername(sender: NSNotification) {
+        updateProfileCollectionView()
+    }
+
+    @objc private func createdFeed(sender: NSNotification) {
+
+        guard self.feeds != nil else {
+            return
+        }
+
+        let feed = (sender.object as! Box<DiscoveredFeed>).value
+        self.feeds!.insert(feed, atIndex: 0)
+
+        let feedAttachments = feeds!.map({ feed -> DiscoveredAttachment? in
+            if let attachment = feed.attachment {
+                if case let .Images(attachments) = attachment {
+                    return attachments.first
+                }
+            }
+
+            return nil
+        })
+        self.feedAttachments = feedAttachments
+
+        updateProfileCollectionView()
+    }
+
     private func updateProfileCollectionView() {
         dispatch_async(dispatch_get_main_queue()) {
             self.profileCollectionView.collectionViewLayout.invalidateLayout()
@@ -996,8 +1012,6 @@ class ProfileViewController: SegueViewController {
 
         if let profileUser = profileUser {
                     
-            GoogleAnalyticsTrackEvent("Say Hi", label: "\(profileUser.nickname) \(profileUser.userID)", value: 0)
-
             guard let realm = try? Realm() else {
                 return
             }
@@ -1107,86 +1121,6 @@ class ProfileViewController: SegueViewController {
         }
     }
 
-    /*
-    func moreAction() {
-
-        let alertController = UIAlertController(title: nil, message: nil, preferredStyle: .ActionSheet)
-
-        let toggleDisturbAction: UIAlertAction = UIAlertAction(title: NSLocalizedString("Do not disturb", comment: ""), style: .Default) { action -> Void in
-            // TODO: toggleDisturbAction
-        }
-        alertController.addAction(toggleDisturbAction)
-
-        let reportAction: UIAlertAction = UIAlertAction(title: NSLocalizedString("Report", comment: ""), style: .Default) { action -> Void in
-
-            let reportWithReason: ReportReason -> Void = { reason in
-
-                if let profileUser = self.profileUser {
-
-                    reportProfileUser(profileUser, forReason: reason, failureHandler: { (reason, errorMessage) in
-                        defaultFailureHandler(reason, errorMessage)
-
-                        if let errorMessage = errorMessage {
-                            dispatch_async(dispatch_get_main_queue()) {
-                                YepAlert.alertSorry(message: errorMessage, inViewController: self)
-                            }
-                        }
-
-                    }, completion: { success in
-                        dispatch_async(dispatch_get_main_queue()) {
-                            YepAlert.alert(title: NSLocalizedString("Success", comment: ""), message: NSLocalizedString("Report recorded!", comment: ""), dismissTitle: NSLocalizedString("OK", comment: ""), inViewController: self, withDismissAction: nil)
-                        }
-                    })
-                }
-            }
-
-            let reportAlertController = UIAlertController(title: NSLocalizedString("Report Reason", comment: ""), message: nil, preferredStyle: .ActionSheet)
-
-            let pornoReasonAction: UIAlertAction = UIAlertAction(title: ReportReason.Porno.description, style: .Default) { action -> Void in
-                reportWithReason(.Porno)
-            }
-            reportAlertController.addAction(pornoReasonAction)
-
-            let advertisingReasonAction: UIAlertAction = UIAlertAction(title: ReportReason.Advertising.description, style: .Default) { action -> Void in
-                reportWithReason(.Advertising)
-            }
-            reportAlertController.addAction(advertisingReasonAction)
-
-            let scamsReasonAction: UIAlertAction = UIAlertAction(title: ReportReason.Scams.description, style: .Default) { action -> Void in
-                reportWithReason(.Scams)
-            }
-            reportAlertController.addAction(scamsReasonAction)
-
-            let otherReasonAction: UIAlertAction = UIAlertAction(title: ReportReason.Other("").description, style: .Default) { action -> Void in
-                YepAlert.textInput(title: NSLocalizedString("Other Reason", comment: ""), placeholder: nil, oldText: nil, confirmTitle: NSLocalizedString("OK", comment: ""), cancelTitle: NSLocalizedString("Cancel", comment: ""), inViewController: self, withConfirmAction: { text in
-                    reportWithReason(.Other(text))
-                }, cancelAction: nil)
-            }
-            reportAlertController.addAction(otherReasonAction)
-
-            let cancelAction: UIAlertAction = UIAlertAction(title: NSLocalizedString("Cancel", comment: ""), style: .Cancel) { action -> Void in
-                self.dismissViewControllerAnimated(true, completion: nil)
-            }
-            reportAlertController.addAction(cancelAction)
-
-            self.presentViewController(reportAlertController, animated: true, completion: nil)
-        }
-        alertController.addAction(reportAction)
-
-        let blockAction: UIAlertAction = UIAlertAction(title: NSLocalizedString("Block", comment: ""), style: .Destructive) { action -> Void in
-            // TODO: blockAction
-        }
-        alertController.addAction(blockAction)
-
-        let cancelAction: UIAlertAction = UIAlertAction(title: NSLocalizedString("Cancel", comment: ""), style: .Cancel) { action -> Void in
-            self.dismissViewControllerAnimated(true, completion: nil)
-        }
-        alertController.addAction(cancelAction)
-
-        self.presentViewController(alertController, animated: true, completion: nil)
-    }
-    */
-
     // MARK: Navigation
 
     override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?) {
@@ -1212,21 +1146,6 @@ class ProfileViewController: SegueViewController {
             }
 
             vc.hidesBottomBarWhenPushed = true
-            
-//            if let skillInfo = sender as? [String: AnyObject] {
-//                let vc = segue.destinationViewController as! SkillHomeViewController
-//                vc.hidesBottomBarWhenPushed = true
-//
-//                if let preferedSkillSet = skillInfo["preferedSkillSet"] as? Int {
-//                    vc.preferedSkillSet = SkillSet(rawValue: preferedSkillSet)
-//                }
-//
-//                vc.skill = skillInfo["skill"] as? SkillCell.Skill
-//
-//                vc.afterUpdatedSkillCoverAction = { [weak self] in
-//                    self?.updateProfileCollectionView()
-//                }
-//            }
 
         case "showFeedsOfProfileUser":
 
@@ -1413,7 +1332,6 @@ extension ProfileViewController: UICollectionViewDataSource, UICollectionViewDel
             }
 
             cell.tapAction = { [weak self] skill in
-                //self?.performSegueWithIdentifier("showSkillHome", sender: ["skill": skill, "preferedSkillSet": SkillSet.Master.rawValue])
                 self?.performSegueWithIdentifier("showFeedsWithSkill", sender: ["skill": skill, "preferedSkillSet": SkillSet.Master.rawValue])
             }
 
@@ -1433,7 +1351,6 @@ extension ProfileViewController: UICollectionViewDataSource, UICollectionViewDel
             }
 
             cell.tapAction = { [weak self] skill in
-                //self?.performSegueWithIdentifier("showSkillHome", sender: ["skill": skill, "preferedSkillSet": SkillSet.Learning.rawValue])
                 self?.performSegueWithIdentifier("showFeedsWithSkill", sender: ["skill": skill, "preferedSkillSet": SkillSet.Learning.rawValue])
             }
 
@@ -1814,31 +1731,6 @@ extension ProfileViewController: UICollectionViewDataSource, UICollectionViewDel
 }
 
 extension ProfileViewController: UIScrollViewDelegate {
-
-    func scrollViewDidScroll(scrollView: UIScrollView) {
-        
-//        guard let profileUser = profileUser else {
-//            return
-//        }
-//        
-//        if let _ = profileUser.username {
-//            
-//        } else {
-//            if profileUser.userID != YepUserDefaults.userID.value {
-//                return
-//            }
-//        }
-//        
-//        let progress = -(scrollView.contentOffset.y)/100
-//        
-//        shareView.center = CGPoint(x: view.frame.width/2.0, y: 150.0 + 50*progress)
-//        
-//        shareView.updateWithProgress(progress)
-        
-//        if scrollView.contentOffset.y < -300 {
-//            YepAlert.alert(title: "Hello", message: "My name is NIX.\nHow are you?", dismissTitle: "I'm fine.", inViewController: self, withDismissAction: nil)
-//        }
-    }
     
     func scrollViewDidEndDragging(scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         if shareView.progress >= 1.0 {
@@ -1864,7 +1756,7 @@ extension ProfileViewController: NSURLConnectionDataDelegate {
                 
                 socialAccountWithProvider(socialAccount.rawValue, failureHandler: { reason, errorMessage in
 
-                    defaultFailureHandler(reason, errorMessage: errorMessage)
+                    defaultFailureHandler(reason: reason, errorMessage: errorMessage)
 
                 }, completion: { provider in
 

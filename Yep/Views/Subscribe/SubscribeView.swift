@@ -66,16 +66,15 @@ class SubscribeView: UIView {
             horizontalLineView.translatesAutoresizingMaskIntoConstraints = false
 
             horizontalLineView.backgroundColor = UIColor.clearColor()
-            //horizontalLineView.lineColor = UIColor.lightGrayColor()
             horizontalLineView.atBottom = false
 
             let views = [
                 "horizontalLineView": horizontalLineView,
             ]
 
-            let constraintsH = NSLayoutConstraint.constraintsWithVisualFormat("H:|[horizontalLineView]|", options: NSLayoutFormatOptions(rawValue: 0), metrics: nil, views: views)
+            let constraintsH = NSLayoutConstraint.constraintsWithVisualFormat("H:|[horizontalLineView]|", options: [], metrics: nil, views: views)
 
-            let constraintsV = NSLayoutConstraint.constraintsWithVisualFormat("V:|[horizontalLineView(1)]", options: NSLayoutFormatOptions(rawValue: 0), metrics: nil, views: views)
+            let constraintsV = NSLayoutConstraint.constraintsWithVisualFormat("V:|[horizontalLineView(1)]", options: [], metrics: nil, views: views)
 
             NSLayoutConstraint.activateConstraints(constraintsH)
             NSLayoutConstraint.activateConstraints(constraintsV)
@@ -101,7 +100,7 @@ class SubscribeView: UIView {
 
             let constraintsH = NSLayoutConstraint.constraintsWithVisualFormat("H:|-[iconImageView]-[promptLabel]-(>=10)-[subscribeButton]-[dismissButton]-(9)-|", options: NSLayoutFormatOptions.AlignAllCenterY, metrics: nil, views: views)
 
-            let constraintsV = NSLayoutConstraint.constraintsWithVisualFormat("V:|[dismissButton]|", options: NSLayoutFormatOptions(rawValue: 0), metrics: nil, views: views)
+            let constraintsV = NSLayoutConstraint.constraintsWithVisualFormat("V:|[dismissButton]|", options: [], metrics: nil, views: views)
 
             NSLayoutConstraint.activateConstraints(constraintsH)
             NSLayoutConstraint.activateConstraints(constraintsV)

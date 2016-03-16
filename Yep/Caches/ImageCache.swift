@@ -19,6 +19,14 @@ class ImageCache {
     let cacheQueue = dispatch_queue_create("ImageCacheQueue", DISPATCH_QUEUE_SERIAL)
     let cacheAttachmentQueue = dispatch_queue_create("ImageCacheAttachmentQueue", DISPATCH_QUEUE_SERIAL)
 //    let cacheQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0)
+
+    class func attachmentOriginKeyWithURLString(URLString: String) -> String {
+        return "attachment-0.0-\(URLString)"
+    }
+
+    class func attachmentSideLengthKeyWithURLString(URLString: String, sideLength: CGFloat) -> String {
+        return "attachment-\(sideLength)-\(URLString)"
+    }
     
     func imageOfAttachment(attachment: DiscoveredAttachment, withMinSideLength: CGFloat?, completion: (url: NSURL, image: UIImage?, cacheType: CacheType) -> Void) {
 
@@ -32,16 +40,20 @@ class ImageCache {
             sideLength = withMinSideLength
         }
         
-        let attachmentOriginKey = "attachment-0.0-\(attachmentURL.absoluteString)"
+        let attachmentOriginKey = ImageCache.attachmentOriginKeyWithURLString(attachmentURL.absoluteString)
 
-        let attachmentSideLengthKey = "attachment-\(sideLength)-\(attachmentURL.absoluteString)"
+        let attachmentSideLengthKey = ImageCache.attachmentSideLengthKeyWithURLString(attachmentURL.absoluteString, sideLength: sideLength)
 
         //println("attachmentSideLengthKey: \(attachmentSideLengthKey)")
 
-        let OptionsInfos: KingfisherManager.Options = (forceRefresh: false, lowPriority: false, cacheMemoryOnly: false, shouldDecode: false, queue: cacheAttachmentQueue, scale: UIScreen.mainScreen().scale)
+        let options: KingfisherOptionsInfo = [
+            .CallbackDispatchQueue(cacheAttachmentQueue),
+            .ScaleFactor(UIScreen.mainScreen().scale),
+        ]
+
         //查找当前 Size 的 Cache
-        
-        Kingfisher.ImageCache.defaultCache.retrieveImageForKey(attachmentSideLengthKey, options: OptionsInfos) { (image, type) -> () in
+
+        Kingfisher.ImageCache.defaultCache.retrieveImageForKey(attachmentSideLengthKey, options: options) { (image, type) -> () in
 
             if let image = image?.decodedImage() {
                 dispatch_async(dispatch_get_main_queue()) {
@@ -52,7 +64,7 @@ class ImageCache {
                 
                 //查找原图
                 
-                Kingfisher.ImageCache.defaultCache.retrieveImageForKey(attachmentOriginKey, options: OptionsInfos) { (image, type) -> () in
+                Kingfisher.ImageCache.defaultCache.retrieveImageForKey(attachmentOriginKey, options: options) { (image, type) -> () in
 
                     if let image = image {
                         
@@ -76,7 +88,7 @@ class ImageCache {
                         
                         // 下载
                         
-                        ImageDownloader.defaultDownloader.downloadImageWithURL(attachmentURL, options: OptionsInfos, progressBlock: { receivedSize, totalSize  in
+                        ImageDownloader.defaultDownloader.downloadImageWithURL(attachmentURL, options: options, progressBlock: { receivedSize, totalSize  in
                             
                         }, completionHandler: {  image, error , imageURL, originalData in
                             
@@ -136,7 +148,7 @@ class ImageCache {
 
             let preloadingPropgress: Double = fileName.isEmpty ? 0.01 : 0.5
 
-            // 若可以，先显示 blurredThumbnailImage
+            // 若可以，先显示 blurredThumbnailImage, Video 仍然需要
 
             let thumbnailKey = "thumbnail" + imageKey
 
@@ -162,12 +174,14 @@ class ImageCache {
                             }
 
                         } else {
+                            /*
                             // 或放个默认的图片
                             let defaultImage = tailDirection == .Left ? UIImage(named: "left_tail_image_bubble")! : UIImage(named: "right_tail_image_bubble")!
 
                             dispatch_async(dispatch_get_main_queue()) {
                                 completion(loadingProgress: preloadingPropgress, image: defaultImage)
                             }
+                            */
                         }
                     }
                 }
